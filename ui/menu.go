@@ -125,7 +125,7 @@ func (m *Menu) addInstanceOptions() {
 	options := []keys.KeyName{keys.KeyNew, keys.KeyKill}
 
 	// Action group
-	actionGroup := []keys.KeyName{keys.KeyEnter, keys.KeySubmit}
+	actionGroup := []keys.KeyName{keys.KeyEnter, keys.KeyOpenWorktree, keys.KeySubmit}
 	if m.instance.Status == session.Paused {
 		actionGroup = append(actionGroup, keys.KeyResume)
 	} else {
@@ -162,8 +162,8 @@ func (m *Menu) String() string {
 		end   int
 	}{
 		{0, 2}, // Instance management group (n, d)
-		{2, 5}, // Action group (enter, submit, pause/resume)
-		{6, 8}, // System group (tab, help, q)
+		{2, 6}, // Action group (enter, open worktree, submit, pause/resume)
+		{7, 9}, // System group (tab, help, q)
 	}
 
 	for i, k := range m.options {

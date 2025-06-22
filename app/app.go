@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -632,6 +633,35 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.state = stateDefault
 		})
 		return m, nil
+	case keys.KeyOpenWorktree:
+		selected := m.list.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+
+		// Get the worktree path
+		worktree, err := selected.GetGitWorktree()
+		if err != nil {
+			return m, m.handleError(fmt.Errorf("failed to get worktree: %v", err))
+		}
+
+		worktreePath := worktree.GetWorktreePath()
+
+		// Create tmux window name: instancename-tree
+		windowName := fmt.Sprintf("%s-tree", selected.Title)
+
+		// Create a new tmux window in the current session with the worktree path
+		createWindowAction := func() tea.Msg {
+			// Create new tmux window and change directory to worktree
+			tmuxCmd := fmt.Sprintf("tmux new-window -n '%s' -c '%s'", windowName, worktreePath)
+			if err := exec.Command("sh", "-c", tmuxCmd).Run(); err != nil {
+				return fmt.Errorf("failed to create tmux window: %v", err)
+			}
+			return nil
+		}
+
+		// Execute the action directly without confirmation
+		return m, createWindowAction
 	default:
 		return m, nil
 	}
