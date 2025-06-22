@@ -29,6 +29,21 @@ func GetConfigDir() (string, error) {
 	return filepath.Join(homeDir, ".agent-farmer"), nil
 }
 
+// GetRepoConfigDir returns the path to the repository-local configuration directory
+func GetRepoConfigDir(repoPath string) (string, error) {
+	if repoPath == "" {
+		return "", fmt.Errorf("repository path cannot be empty")
+	}
+
+	// Clean the path to ensure it's absolute
+	absRepoPath, err := filepath.Abs(repoPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path for repo: %w", err)
+	}
+
+	return filepath.Join(absRepoPath, ".agent-farmer"), nil
+}
+
 // Config represents the application configuration
 type Config struct {
 	// DefaultProgram is the default program to run in new instances
@@ -181,12 +196,22 @@ func SaveConfig(config *Config) error {
 
 // getRepoConfigPath returns the path to the repo-specific config file
 func getRepoConfigPath(repoPath string) (string, error) {
+	repoConfigDir, err := GetRepoConfigDir(repoPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get repo config directory: %w", err)
+	}
+
+	return filepath.Join(repoConfigDir, RepoConfigFileName), nil
+}
+
+// getLegacyRepoConfigPath returns the path to the legacy repo-specific config file (for migration)
+func getLegacyRepoConfigPath(repoPath string) (string, error) {
 	configDir, err := GetConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get config directory: %w", err)
 	}
 
-	// Create a hash of the repo path to use as filename
+	// Create a hash of the repo path to use as filename (legacy format)
 	hash := md5.Sum([]byte(repoPath))
 	filename := fmt.Sprintf("repo-%x.json", hash)
 
@@ -195,6 +220,7 @@ func getRepoConfigPath(repoPath string) (string, error) {
 
 // LoadRepoConfig loads the repository-specific configuration
 func LoadRepoConfig(repoPath string) (*RepoConfig, error) {
+	// First try the new repo-local location
 	configPath, err := getRepoConfigPath(repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repo config path: %w", err)
@@ -203,8 +229,38 @@ func LoadRepoConfig(repoPath string) (*RepoConfig, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// Return nil if file doesn't exist - this means no cached config
-			return nil, nil
+			// Try the legacy location for backward compatibility
+			legacyPath, legacyErr := getLegacyRepoConfigPath(repoPath)
+			if legacyErr != nil {
+				return nil, nil // No config found, return nil
+			}
+
+			legacyData, legacyReadErr := os.ReadFile(legacyPath)
+			if legacyReadErr != nil {
+				if os.IsNotExist(legacyReadErr) {
+					return nil, nil // No config found in either location
+				}
+				return nil, fmt.Errorf("failed to read legacy repo config file: %w", legacyReadErr)
+			}
+
+			// Parse legacy config
+			var config RepoConfig
+			if err := json.Unmarshal(legacyData, &config); err != nil {
+				return nil, fmt.Errorf("failed to parse legacy repo config file: %w", err)
+			}
+
+			// Migrate to new location
+			log.DebugLog.Printf("migrating repo config from legacy location: %s -> %s", legacyPath, configPath)
+			if migrateErr := SaveRepoConfig(&config); migrateErr != nil {
+				log.WarningLog.Printf("failed to migrate repo config to new location: %v", migrateErr)
+			} else {
+				// Remove legacy file after successful migration
+				if removeErr := os.Remove(legacyPath); removeErr != nil {
+					log.WarningLog.Printf("failed to remove legacy repo config file: %v", removeErr)
+				}
+			}
+
+			return &config, nil
 		}
 		return nil, fmt.Errorf("failed to read repo config file: %w", err)
 	}
@@ -242,6 +298,7 @@ func SaveRepoConfig(config *RepoConfig) error {
 
 // DeleteRepoConfig deletes the repository-specific configuration
 func DeleteRepoConfig(repoPath string) error {
+	// Delete from new location
 	configPath, err := getRepoConfigPath(repoPath)
 	if err != nil {
 		return fmt.Errorf("failed to get repo config path: %w", err)
@@ -250,6 +307,15 @@ func DeleteRepoConfig(repoPath string) error {
 	err = os.Remove(configPath)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to delete repo config file: %w", err)
+	}
+
+	// Also try to delete from legacy location if it exists
+	legacyPath, legacyErr := getLegacyRepoConfigPath(repoPath)
+	if legacyErr == nil {
+		legacyRemoveErr := os.Remove(legacyPath)
+		if legacyRemoveErr != nil && !os.IsNotExist(legacyRemoveErr) {
+			log.WarningLog.Printf("failed to delete legacy repo config file: %v", legacyRemoveErr)
+		}
 	}
 
 	return nil
