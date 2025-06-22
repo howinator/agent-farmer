@@ -11,11 +11,6 @@
 - Review changes before applying them, checkout changes before pushing them
 - Each task gets its own isolated git workspace, so no conflicts
 
-<br />
-
-https://github.com/user-attachments/assets/aef18253-e58f-4525-9032-f5a3d66c975a
-
-<br />
 
 ### Installation
 
@@ -113,6 +108,10 @@ The menu at the bottom of the screen shows available commands:
 1. **tmux** to create isolated terminal sessions for each agent
 2. **git worktrees** to isolate codebases so each session works on its own branch
 3. A simple TUI interface for easy navigation and management
+
+### Acknowledgements
+
+Agent Farmer is based on the original [Claude Squad](https://github.com/smtg-ai/claude-squad) project. Thanks to the smtg-ai team for the foundational concept and implementation.
 
 ### License
 
