@@ -129,7 +129,7 @@ func (m *Menu) addInstanceOptions() {
 	instanceGroup := []keys.KeyName{keys.KeyNew, keys.KeyKill}
 
 	// Action group
-	actionGroup := []keys.KeyName{keys.KeyEnter, keys.KeyOpenWorktree, keys.KeySubmit}
+	actionGroup := []keys.KeyName{keys.KeyEnter, keys.KeyOpenWorktree, keys.KeyRebase, keys.KeySubmit}
 	if m.instance.Status == session.Paused {
 		actionGroup = append(actionGroup, keys.KeyResume)
 	} else {

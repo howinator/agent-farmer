@@ -82,6 +82,8 @@ var (
 			log.Initialize(false)
 			defer log.Close()
 
+			force, _ := cmd.Flags().GetBool("force")
+
 			state := config.LoadState()
 			storage, err := session.NewStorage(state)
 			if err != nil {
@@ -107,6 +109,14 @@ var (
 				return err
 			}
 			fmt.Println("daemon has been stopped")
+
+			// If force flag is set, also delete all cached repo configs
+			if force {
+				if err := config.DeleteAllRepoConfigs(); err != nil {
+					return fmt.Errorf("failed to delete cached repo configs: %w", err)
+				}
+				fmt.Println("Cached repository configs have been reset")
+			}
 
 			return nil
 		},
@@ -153,6 +163,9 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
+
+	// Add force flag to reset command
+	resetCmd.Flags().BoolVarP(new(bool), "force", "f", false, "Also reset cached repository configurations")
 
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(versionCmd)

@@ -1,19 +1,29 @@
 package git
 
 import (
+	"agent-farmer/config"
 	"agent-farmer/log"
 	"fmt"
 	"os/exec"
 	"strings"
+	"sync"
 )
+
+// gitMutex prevents concurrent git operations that might cause index.lock conflicts
+var gitMutex sync.Mutex
 
 // runGitCommand executes a git command and returns any error
 func (g *GitWorktree) runGitCommand(path string, args ...string) (string, error) {
 	baseArgs := []string{"-C", path}
-	cmd := exec.Command("git", append(baseArgs, args...)...)
+	fullArgs := append(baseArgs, args...)
+	cmd := exec.Command("git", fullArgs...)
+
+	// Log the command being executed for debugging
+	log.DebugLog.Printf("executing git command: git %s", strings.Join(fullArgs, " "))
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		log.ErrorLog.Printf("git command failed: git %s\nOutput: %s\nError: %v", strings.Join(fullArgs, " "), output, err)
 		return "", fmt.Errorf("git command failed: %s (%w)", output, err)
 	}
 
@@ -109,4 +119,92 @@ func (g *GitWorktree) OpenBranchURL() error {
 		return fmt.Errorf("failed to open branch URL: %w", err)
 	}
 	return nil
+}
+
+// RebaseOntoDefault rebases the current branch onto the default branch using git rebase --onto
+func (g *GitWorktree) RebaseOntoDefault() error {
+	// Use mutex to prevent concurrent git operations
+	gitMutex.Lock()
+	defer gitMutex.Unlock()
+
+	log.DebugLog.Printf("starting rebase operation for worktree: %s", g.worktreePath)
+	log.DebugLog.Printf("rebase working on branch: %s", g.branchName)
+	log.DebugLog.Printf("repository path: %s", g.repoPath)
+
+	// Get the default branch for this repository
+	defaultBranch, err := config.GetDefaultBranch(g.repoPath)
+	if err != nil {
+		log.ErrorLog.Printf("failed to get default branch for %s: %v", g.repoPath, err)
+		return fmt.Errorf("failed to get default branch: %w", err)
+	}
+
+	log.InfoLog.Printf("rebasing branch %s onto default branch %s", g.branchName, defaultBranch)
+
+	// Check if there are any uncommitted changes
+	log.DebugLog.Printf("checking for uncommitted changes...")
+	isDirty, err := g.IsDirty()
+	if err != nil {
+		log.ErrorLog.Printf("failed to check dirty status: %v", err)
+		return fmt.Errorf("failed to check for uncommitted changes: %w", err)
+	}
+
+	if isDirty {
+		log.ErrorLog.Printf("cannot rebase with uncommitted changes")
+		return fmt.Errorf("cannot rebase with uncommitted changes - please commit or stash your changes first")
+	}
+	log.DebugLog.Printf("worktree is clean, proceeding with rebase...")
+
+	// Ensure we have the latest changes from the default branch
+	// First fetch the latest changes
+	log.DebugLog.Printf("fetching latest changes from origin/%s...", defaultBranch)
+	if _, err := g.runGitCommand(g.worktreePath, "fetch", "origin", defaultBranch); err != nil {
+		log.ErrorLog.Printf("failed to fetch changes: %v", err)
+		return fmt.Errorf("failed to fetch latest changes: %w", err)
+	}
+
+	// Get the current branch name
+	log.DebugLog.Printf("getting current branch name...")
+	currentBranch, err := g.runGitCommand(g.worktreePath, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		log.ErrorLog.Printf("failed to get current branch: %v", err)
+		return fmt.Errorf("failed to get current branch: %w", err)
+	}
+	currentBranch = strings.TrimSpace(currentBranch)
+	log.DebugLog.Printf("current branch: %s", currentBranch)
+
+	// Get the merge-base fork-point
+	log.DebugLog.Printf("finding merge-base fork-point...")
+	forkPoint, err := g.runGitCommand(g.worktreePath, "merge-base", "--fork-point", "origin/"+defaultBranch)
+	if err != nil {
+		// If fork-point fails, use regular merge-base as fallback
+		log.WarningLog.Printf("merge-base --fork-point failed, falling back to regular merge-base: %v", err)
+		forkPoint, err = g.runGitCommand(g.worktreePath, "merge-base", "origin/"+defaultBranch, currentBranch)
+		if err != nil {
+			log.ErrorLog.Printf("failed to find merge-base: %v", err)
+			return fmt.Errorf("failed to find merge-base: %w", err)
+		}
+	}
+	forkPoint = strings.TrimSpace(forkPoint)
+	log.DebugLog.Printf("fork point: %s", forkPoint)
+
+	// Perform the rebase using --onto
+	// This is equivalent to: git rebase --onto origin/main $(git merge-base --fork-point origin/main) HEAD
+	log.DebugLog.Printf("executing rebase: git rebase --onto origin/%s %s %s", defaultBranch, forkPoint, currentBranch)
+	if _, err := g.runGitCommand(g.worktreePath, "rebase", "--onto", "origin/"+defaultBranch, forkPoint, currentBranch); err != nil {
+		log.ErrorLog.Printf("rebase command failed: %v", err)
+		// If rebase fails, we should abort it to leave the repo in a clean state
+		if abortErr := g.abortRebase(); abortErr != nil {
+			log.ErrorLog.Printf("failed to abort rebase after failure: %v", abortErr)
+		}
+		return fmt.Errorf("rebase failed: %w", err)
+	}
+
+	log.InfoLog.Printf("successfully rebased %s onto %s", currentBranch, defaultBranch)
+	return nil
+}
+
+// abortRebase aborts an ongoing rebase operation
+func (g *GitWorktree) abortRebase() error {
+	_, err := g.runGitCommand(g.worktreePath, "rebase", "--abort")
+	return err
 }
