@@ -55,6 +55,7 @@ func (h helpType) ToContent(instance *session.Instance) string {
 			"",
 			headerStyle.Render("Handoff:"),
 			keyStyle.Render("p")+descStyle.Render("         - Commit and push branch to github"),
+			keyStyle.Render("R")+descStyle.Render("         - Rebase session branch onto default branch"),
 			keyStyle.Render("c")+descStyle.Render("         - Checkout: commit changes and pause session"),
 			keyStyle.Render("r")+descStyle.Render("         - Resume a paused session"),
 			"",
@@ -80,6 +81,7 @@ func (h helpType) ToContent(instance *session.Instance) string {
 			keyStyle.Render("D")+descStyle.Render("     - Kill (delete) the selected session"),
 			"",
 			headerStyle.Render("Handoff:"),
+			keyStyle.Render("R")+descStyle.Render("     - Rebase session branch onto default branch"),
 			keyStyle.Render("c")+descStyle.Render("     - Checkout this instance's branch"),
 			keyStyle.Render("p")+descStyle.Render("     - Push branch to GitHub to create a PR"),
 		)
