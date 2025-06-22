@@ -5,6 +5,7 @@ import (
 	"agent-farmer/keys"
 	"agent-farmer/log"
 	"agent-farmer/session"
+	"agent-farmer/session/tmux"
 	"agent-farmer/ui"
 	"agent-farmer/ui/overlay"
 	"context"
@@ -626,6 +627,52 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			ch, err := m.list.Attach()
 			if err != nil {
 				m.handleError(err)
+				return
+			}
+			<-ch
+			m.state = stateDefault
+		})
+		return m, nil
+	case keys.KeyOpenWorktree:
+		selected := m.list.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+
+		// Get the worktree path
+		worktree, err := selected.GetGitWorktree()
+		if err != nil {
+			return m, m.handleError(fmt.Errorf("failed to get worktree: %v", err))
+		}
+
+		worktreePath := worktree.GetWorktreePath()
+		sessionName := fmt.Sprintf("%s-tree", selected.Title)
+
+		// Show help screen before attaching to worktree session (similar to 'o' key)
+		m.showHelpScreen(helpTypeInstanceAttach, func() {
+			// Create a tmux session for the worktree using proper TmuxSession infrastructure
+			// Use shell as program to ensure it starts properly
+			tmuxSession := tmux.NewTmuxSession(sessionName, "$SHELL")
+
+			// Check if session already exists
+			if tmuxSession.DoesSessionExist() {
+				// Session exists, restore and attach to it
+				if err := tmuxSession.Restore(); err != nil {
+					m.handleError(fmt.Errorf("failed to restore worktree session: %v", err))
+					return
+				}
+			} else {
+				// Create new session in the worktree directory
+				if err := tmuxSession.Start(worktreePath); err != nil {
+					m.handleError(fmt.Errorf("failed to create worktree session: %v", err))
+					return
+				}
+			}
+
+			// Attach to the session using proper TmuxSession infrastructure
+			ch, err := tmuxSession.Attach()
+			if err != nil {
+				m.handleError(fmt.Errorf("failed to attach to worktree session: %v", err))
 				return
 			}
 			<-ch

@@ -49,6 +49,10 @@ type Menu struct {
 	instance      *session.Instance
 	isInDiffTab   bool
 
+	// Group boundaries for dynamic menu rendering
+	instanceGroupEnd int
+	actionGroupEnd   int
+
 	// keyDown is the key which is pressed. The default is -1.
 	keyDown keys.KeyName
 }
@@ -122,10 +126,10 @@ func (m *Menu) updateOptions() {
 
 func (m *Menu) addInstanceOptions() {
 	// Instance management group
-	options := []keys.KeyName{keys.KeyNew, keys.KeyKill}
+	instanceGroup := []keys.KeyName{keys.KeyNew, keys.KeyKill}
 
 	// Action group
-	actionGroup := []keys.KeyName{keys.KeyEnter, keys.KeySubmit}
+	actionGroup := []keys.KeyName{keys.KeyEnter, keys.KeyOpenWorktree, keys.KeySubmit}
 	if m.instance.Status == session.Paused {
 		actionGroup = append(actionGroup, keys.KeyResume)
 	} else {
@@ -140,11 +144,13 @@ func (m *Menu) addInstanceOptions() {
 	// System group
 	systemGroup := []keys.KeyName{keys.KeyTab, keys.KeyHelp, keys.KeyQuit}
 
-	// Combine all groups
-	options = append(options, actionGroup...)
-	options = append(options, systemGroup...)
-
-	m.options = options
+	// Combine all groups and store group boundaries
+	m.options = []keys.KeyName{}
+	m.options = append(m.options, instanceGroup...)
+	m.instanceGroupEnd = len(m.options)
+	m.options = append(m.options, actionGroup...)
+	m.actionGroupEnd = len(m.options)
+	m.options = append(m.options, systemGroup...)
 }
 
 // SetSize sets the width of the window. The menu will be centered horizontally within this width.
@@ -156,14 +162,31 @@ func (m *Menu) SetSize(width, height int) {
 func (m *Menu) String() string {
 	var s strings.Builder
 
-	// Define group boundaries
+	// Compute group boundaries dynamically
 	groups := []struct {
 		start int
 		end   int
-	}{
-		{0, 2}, // Instance management group (n, d)
-		{2, 5}, // Action group (enter, submit, pause/resume)
-		{6, 8}, // System group (tab, help, q)
+	}{}
+
+	if m.state == StateDefault && m.instance != nil {
+		// For instance state, we have three groups with dynamic boundaries
+		groups = []struct {
+			start int
+			end   int
+		}{
+			{0, m.instanceGroupEnd},                // Instance management group
+			{m.instanceGroupEnd, m.actionGroupEnd}, // Action group
+			{m.actionGroupEnd, len(m.options)},     // System group
+		}
+	} else {
+		// For empty state, treat first two options as action group
+		groups = []struct {
+			start int
+			end   int
+		}{
+			{0, 2},              // Action group (n, N)
+			{2, len(m.options)}, // System group (help, quit)
+		}
 	}
 
 	for i, k := range m.options {
@@ -183,11 +206,13 @@ func (m *Menu) String() string {
 		var inActionGroup bool
 		switch m.state {
 		case StateEmpty:
-			// For empty state, the action group is the first group
-			inActionGroup = i <= 1
+			// For empty state, the action group is the first group (n, N)
+			inActionGroup = i >= groups[0].start && i < groups[0].end
 		default:
-			// For other states, the action group is the second group
-			inActionGroup = i >= groups[1].start && i < groups[1].end
+			// For instance state, the action group is the second group
+			if len(groups) >= 2 {
+				inActionGroup = i >= groups[1].start && i < groups[1].end
+			}
 		}
 
 		if inActionGroup {
