@@ -73,6 +73,9 @@ type home struct {
 	// keySent is used to manage underlining menu items
 	keySent bool
 
+	// quitConfirmed is set to true when user confirms quit
+	quitConfirmed bool
+
 	// -- UI Components --
 
 	// list displays the list of instances
@@ -184,6 +187,14 @@ func (m *home) Init() tea.Cmd {
 }
 
 func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle confirmed quit
+	if m.quitConfirmed {
+		if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+			return m, m.handleError(err)
+		}
+		return m, tea.Quit
+	}
+
 	switch msg := msg.(type) {
 	case hideErrMsg:
 		m.errBox.Clear()
@@ -254,15 +265,23 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *home) handleQuitConfirmation() (tea.Model, tea.Cmd) {
-	// Create the quit action as a tea.Cmd
-	quitAction := func() tea.Msg {
-		if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
-			return err
-		}
-		return tea.Quit()
+	m.state = stateConfirm
+
+	// Create and show the confirmation overlay
+	m.confirmationOverlay = overlay.NewConfirmationOverlay("Are you sure you want to quit?")
+	m.confirmationOverlay.SetWidth(50)
+
+	// Set callbacks for confirmation and cancellation
+	m.confirmationOverlay.OnConfirm = func() {
+		m.state = stateDefault
+		m.quitConfirmed = true
 	}
 
-	return m, m.confirmAction("Are you sure you want to quit?", quitAction)
+	m.confirmationOverlay.OnCancel = func() {
+		m.state = stateDefault
+	}
+
+	return m, nil
 }
 
 func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly bool) {
