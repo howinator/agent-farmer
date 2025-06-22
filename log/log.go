@@ -12,6 +12,7 @@ var (
 	WarningLog *log.Logger
 	InfoLog    *log.Logger
 	ErrorLog   *log.Logger
+	DebugLog   *log.Logger
 )
 
 var logFileName = filepath.Join(os.TempDir(), "agentfarmer.log")
@@ -38,6 +39,7 @@ func Initialize(daemon bool) {
 	InfoLog = log.New(f, fmt.Sprintf(fmtS, "INFO:"), log.Ldate|log.Ltime|log.Lshortfile)
 	WarningLog = log.New(f, fmt.Sprintf(fmtS, "WARNING:"), log.Ldate|log.Ltime|log.Lshortfile)
 	ErrorLog = log.New(f, fmt.Sprintf(fmtS, "ERROR:"), log.Ldate|log.Ltime|log.Lshortfile)
+	DebugLog = log.New(f, fmt.Sprintf(fmtS, "DEBUG:"), log.Ldate|log.Ltime|log.Lshortfile)
 
 	globalLogFile = f
 }

@@ -287,12 +287,12 @@ func GetDefaultBranch(repoPath string) (string, error) {
 
 	// If we have a cached value, return it
 	if repoConfig != nil && repoConfig.DefaultBranch != "" {
-		log.InfoLog.Printf("using cached default branch: %s", repoConfig.DefaultBranch)
+		log.DebugLog.Printf("using cached default branch: %s", repoConfig.DefaultBranch)
 		return repoConfig.DefaultBranch, nil
 	}
 
 	// Otherwise, fetch it from git
-	log.InfoLog.Printf("fetching default branch from git for repo: %s", repoPath)
+	log.DebugLog.Printf("fetching default branch from git for repo: %s", repoPath)
 	cmd := exec.Command("git", "remote", "show", "origin")
 	cmd.Dir = repoPath
 	output, err := cmd.Output()
@@ -318,7 +318,7 @@ func GetDefaultBranch(repoPath string) (string, error) {
 					log.WarningLog.Printf("failed to cache default branch: %v", saveErr)
 				}
 
-				log.InfoLog.Printf("cached default branch: %s", defaultBranch)
+				log.DebugLog.Printf("cached default branch: %s", defaultBranch)
 				return defaultBranch, nil
 			}
 		}

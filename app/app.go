@@ -97,6 +97,8 @@ type home struct {
 	textOverlay *overlay.TextOverlay
 	// confirmationOverlay displays confirmation modals
 	confirmationOverlay *overlay.ConfirmationOverlay
+	// pendingAction stores the action to execute when confirmation is confirmed
+	pendingAction tea.Cmd
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -534,7 +536,22 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		shouldClose := m.confirmationOverlay.HandleKeyPress(msg)
 		if shouldClose {
 			m.state = stateDefault
+			var actionToExecute tea.Cmd = nil
+
+			// If we have a pending action and it was confirmed (not cancelled)
+			if m.pendingAction != nil && msg.String() == "y" {
+				actionToExecute = m.pendingAction
+			}
+
+			// Clean up
 			m.confirmationOverlay = nil
+			m.pendingAction = nil
+
+			// Execute the action if confirmed
+			if actionToExecute != nil {
+				return m, actionToExecute
+			}
+
 			return m, nil
 		}
 		return m, nil
@@ -762,13 +779,17 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		// Create the rebase action as a tea.Cmd
 		rebaseAction := func() tea.Msg {
+			log.DebugLog.Printf("starting rebase for session '%s'", selected.Title)
 			worktree, err := selected.GetGitWorktree()
 			if err != nil {
+				log.ErrorLog.Printf("failed to get git worktree for rebase: %v", err)
 				return err
 			}
 			if err = worktree.RebaseOntoDefault(); err != nil {
+				log.ErrorLog.Printf("rebase failed for session '%s': %v", selected.Title, err)
 				return err
 			}
+			log.InfoLog.Printf("rebase completed successfully for session '%s'", selected.Title)
 			return nil
 		}
 
@@ -847,6 +868,7 @@ func (m *home) handleError(err error) tea.Cmd {
 // confirmAction shows a confirmation modal and stores the action to execute on confirm
 func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
 	m.state = stateConfirm
+	m.pendingAction = action
 
 	// Create and show the confirmation overlay using ConfirmationOverlay
 	m.confirmationOverlay = overlay.NewConfirmationOverlay(message)
@@ -856,14 +878,12 @@ func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
 	// Set callbacks for confirmation and cancellation
 	m.confirmationOverlay.OnConfirm = func() {
 		m.state = stateDefault
-		// Execute the action if it exists
-		if action != nil {
-			_ = action()
-		}
+		// Action will be executed in the handleKeyPress method
 	}
 
 	m.confirmationOverlay.OnCancel = func() {
 		m.state = stateDefault
+		m.pendingAction = nil
 	}
 
 	return nil
