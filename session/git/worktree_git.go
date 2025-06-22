@@ -61,7 +61,7 @@ func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {
 	pushCmd.Dir = g.worktreePath
 	if err := pushCmd.Run(); err != nil {
 		// If sync fails, try creating the branch on remote first
-		gitPushCmd := exec.Command("git", "push", "-u", "origin", g.branchName)
+		gitPushCmd := exec.Command("git", "push", "--force-with-lease", "-u", "origin", g.branchName)
 		gitPushCmd.Dir = g.worktreePath
 		if pushOutput, pushErr := gitPushCmd.CombinedOutput(); pushErr != nil {
 			log.ErrorLog.Print(pushErr)
