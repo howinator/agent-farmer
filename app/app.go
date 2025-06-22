@@ -253,11 +253,16 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *home) handleQuit() (tea.Model, tea.Cmd) {
-	if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
-		return m, m.handleError(err)
+func (m *home) handleQuitConfirmation() (tea.Model, tea.Cmd) {
+	// Create the quit action as a tea.Cmd
+	quitAction := func() tea.Msg {
+		if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+			return err
+		}
+		return tea.Quit()
 	}
-	return m, tea.Quit
+
+	return m, m.confirmAction("Are you sure you want to quit?", quitAction)
 }
 
 func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly bool) {
@@ -435,7 +440,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Handle quit commands first
 	if msg.String() == "ctrl+c" || msg.String() == "q" {
-		return m.handleQuit()
+		return m.handleQuitConfirmation()
 	}
 
 	name, ok := keys.GlobalKeyStringsMap[msg.String()]
