@@ -647,13 +647,13 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		worktreePath := worktree.GetWorktreePath()
 		sessionName := fmt.Sprintf("%s-tree", selected.Title)
-		
+
 		// Show help screen before attaching to worktree session (similar to 'o' key)
 		m.showHelpScreen(helpTypeInstanceAttach, func() {
 			// Create a tmux session for the worktree using proper TmuxSession infrastructure
 			// Use shell as program to ensure it starts properly
 			tmuxSession := tmux.NewTmuxSession(sessionName, "$SHELL")
-			
+
 			// Check if session already exists
 			if tmuxSession.DoesSessionExist() {
 				// Session exists, restore and attach to it
@@ -668,7 +668,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					return
 				}
 			}
-			
+
 			// Attach to the session using proper TmuxSession infrastructure
 			ch, err := tmuxSession.Attach()
 			if err != nil {

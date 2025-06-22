@@ -167,16 +167,16 @@ func (m *Menu) String() string {
 		start int
 		end   int
 	}{}
-	
+
 	if m.state == StateDefault && m.instance != nil {
 		// For instance state, we have three groups with dynamic boundaries
 		groups = []struct {
 			start int
 			end   int
 		}{
-			{0, m.instanceGroupEnd},                    // Instance management group
-			{m.instanceGroupEnd, m.actionGroupEnd},     // Action group  
-			{m.actionGroupEnd, len(m.options)},         // System group
+			{0, m.instanceGroupEnd},                // Instance management group
+			{m.instanceGroupEnd, m.actionGroupEnd}, // Action group
+			{m.actionGroupEnd, len(m.options)},     // System group
 		}
 	} else {
 		// For empty state, treat first two options as action group
@@ -184,7 +184,7 @@ func (m *Menu) String() string {
 			start int
 			end   int
 		}{
-			{0, 2}, // Action group (n, N)
+			{0, 2},              // Action group (n, N)
 			{2, len(m.options)}, // System group (help, quit)
 		}
 	}
