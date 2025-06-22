@@ -1,10 +1,10 @@
 {
   "repo_path": "/Users/howie/projects/agent-farmer/.agent-farmer/worktrees/2-fix-github-issue_184b764a55fd70e0",
   "default_branch": "",
-  "last_updated": 1750623335,
+  "last_updated": 1750629161,
   "dev_environment": {
-    "enabled": false,
-    "tiltfile_path": "Tiltfile",
+    "enabled": true,
+    "tiltfile_path": ".agent-farmer/Tiltfile",
     "docker_compose_path": "docker-compose.yml",
     "hostname_pattern": "{task}.agent",
     "port": 3000
