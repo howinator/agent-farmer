@@ -17,6 +17,16 @@ func getWorktreeDirectory() (string, error) {
 	return filepath.Join(configDir, "worktrees"), nil
 }
 
+// getRepoWorktreeDirectory returns the repository-local worktree directory
+func getRepoWorktreeDirectory(repoPath string) (string, error) {
+	repoConfigDir, err := config.GetRepoConfigDir(repoPath)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(repoConfigDir, "worktrees"), nil
+}
+
 // GitWorktree manages git worktree operations for a session
 type GitWorktree struct {
 	// Path to the repository
@@ -60,7 +70,7 @@ func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, bra
 		return nil, "", err
 	}
 
-	worktreeDir, err := getWorktreeDirectory()
+	worktreeDir, err := getRepoWorktreeDirectory(repoPath)
 	if err != nil {
 		return nil, "", err
 	}

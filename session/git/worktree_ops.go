@@ -33,7 +33,10 @@ func (g *GitWorktree) Setup() error {
 // SetupFromExistingBranch creates a worktree from an existing branch
 func (g *GitWorktree) SetupFromExistingBranch() error {
 	// Ensure worktrees directory exists
-	worktreesDir := filepath.Join(g.repoPath, "worktrees")
+	worktreesDir, err := getRepoWorktreeDirectory(g.repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to get worktree directory: %w", err)
+	}
 	if err := os.MkdirAll(worktreesDir, 0755); err != nil {
 		return fmt.Errorf("failed to create worktrees directory: %w", err)
 	}
@@ -52,7 +55,10 @@ func (g *GitWorktree) SetupFromExistingBranch() error {
 // SetupNewWorktree creates a new worktree from HEAD
 func (g *GitWorktree) SetupNewWorktree() error {
 	// Ensure worktrees directory exists
-	worktreesDir := filepath.Join(g.repoPath, "worktrees")
+	worktreesDir, err := getRepoWorktreeDirectory(g.repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to get worktree directory: %w", err)
+	}
 	if err := os.MkdirAll(worktreesDir, 0755); err != nil {
 		return fmt.Errorf("failed to create worktrees directory: %w", err)
 	}
