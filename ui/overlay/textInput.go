@@ -97,15 +97,12 @@ func (t *TextInputOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
 		t.Canceled = true
 		return true
 	case tea.KeyEnter:
-		if t.FocusIndex == 1 {
-			// Enter button is focused, so submit.
-			t.Submitted = true
-			if t.OnSubmit != nil {
-				t.OnSubmit()
-			}
-			return true
+		// Always pass Enter to textarea for line breaks
+		// Only Ctrl+Enter should submit the form
+		if t.FocusIndex == 0 {
+			t.textarea, _ = t.textarea.Update(msg)
 		}
-		fallthrough // Send enter key to textarea
+		return false
 	default:
 		if t.FocusIndex == 0 {
 			t.textarea, _ = t.textarea.Update(msg)
@@ -163,7 +160,7 @@ func (t *TextInputOverlay) Render() string {
 	content += t.textarea.View() + "\n\n"
 
 	// Render submit button with appropriate style
-	submitButton := " Submit (Ctrl+Enter) "
+	submitButton := " Submit with Ctrl+Enter "
 	if t.FocusIndex == 1 {
 		submitButton = focusedButtonStyle.Render(submitButton)
 	} else {
