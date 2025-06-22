@@ -109,6 +109,10 @@ The menu at the bottom of the screen shows available commands:
 2. **git worktrees** to isolate codebases so each session works on its own branch
 3. A simple TUI interface for easy navigation and management
 
+### Acknowledgements
+
+Agent Farmer is based on the original [Claude Squad](https://github.com/smtg-ai/claude-squad) project. Thanks to the smtg-ai team for the foundational concept and implementation.
+
 ### License
 
 [AGPL-3.0](LICENSE.md)
