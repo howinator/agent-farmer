@@ -5,12 +5,12 @@ import (
 	"agent-farmer/keys"
 	"agent-farmer/log"
 	"agent-farmer/session"
+	"agent-farmer/session/tmux"
 	"agent-farmer/ui"
 	"agent-farmer/ui/overlay"
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -646,22 +646,39 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		worktreePath := worktree.GetWorktreePath()
-
-		// Create tmux window name: instancename-tree
-		windowName := fmt.Sprintf("%s-tree", selected.Title)
-
-		// Create a new tmux window in the current session with the worktree path
-		createWindowAction := func() tea.Msg {
-			// Create new tmux window and change directory to worktree
-			tmuxCmd := fmt.Sprintf("tmux new-window -n '%s' -c '%s'", windowName, worktreePath)
-			if err := exec.Command("sh", "-c", tmuxCmd).Run(); err != nil {
-				return fmt.Errorf("failed to create tmux window: %v", err)
+		sessionName := fmt.Sprintf("%s-tree", selected.Title)
+		
+		// Show help screen before attaching to worktree session (similar to 'o' key)
+		m.showHelpScreen(helpTypeInstanceAttach, func() {
+			// Create a tmux session for the worktree using proper TmuxSession infrastructure
+			// Use shell as program to ensure it starts properly
+			tmuxSession := tmux.NewTmuxSession(sessionName, "$SHELL")
+			
+			// Check if session already exists
+			if tmuxSession.DoesSessionExist() {
+				// Session exists, restore and attach to it
+				if err := tmuxSession.Restore(); err != nil {
+					m.handleError(fmt.Errorf("failed to restore worktree session: %v", err))
+					return
+				}
+			} else {
+				// Create new session in the worktree directory
+				if err := tmuxSession.Start(worktreePath); err != nil {
+					m.handleError(fmt.Errorf("failed to create worktree session: %v", err))
+					return
+				}
 			}
-			return nil
-		}
-
-		// Execute the action directly without confirmation
-		return m, createWindowAction
+			
+			// Attach to the session using proper TmuxSession infrastructure
+			ch, err := tmuxSession.Attach()
+			if err != nil {
+				m.handleError(fmt.Errorf("failed to attach to worktree session: %v", err))
+				return
+			}
+			<-ch
+			m.state = stateDefault
+		})
+		return m, nil
 	default:
 		return m, nil
 	}
