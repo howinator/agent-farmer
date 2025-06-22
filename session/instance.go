@@ -1,6 +1,7 @@
 package session
 
 import (
+	"agent-farmer/devenv"
 	"agent-farmer/log"
 	"agent-farmer/session/git"
 	"agent-farmer/session/tmux"
@@ -62,6 +63,8 @@ type Instance struct {
 	tmuxSession *tmux.TmuxSession
 	// gitWorktree is the git worktree for the instance.
 	gitWorktree *git.GitWorktree
+	// devEnvManager manages the development environment for this instance.
+	devEnvManager *devenv.DevEnvironmentManager
 }
 
 // ToInstanceData converts an Instance to its serializable form
@@ -228,6 +231,14 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 			return setupErr
 		}
 
+		// Initialize development environment manager
+		devEnvManager, err := devenv.NewDevEnvironmentManager(i.gitWorktree.GetWorktreePath())
+		if err != nil {
+			log.WarningLog.Printf("failed to initialize dev environment manager: %v", err)
+		} else {
+			i.devEnvManager = devEnvManager
+		}
+
 		// Create new session
 		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
 			// Cleanup git worktree if tmux session creation fails
@@ -253,8 +264,15 @@ func (i *Instance) Kill() error {
 
 	var errs []error
 
-	// Always try to cleanup both resources, even if one fails
-	// Clean up tmux session first since it's using the git worktree
+	// Always try to cleanup all resources, even if one fails
+	// Stop development environment first
+	if i.devEnvManager != nil {
+		if err := i.devEnvManager.StopEnvironment(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to stop development environment: %w", err))
+		}
+	}
+
+	// Clean up tmux session since it's using the git worktree
 	if i.tmuxSession != nil {
 		if err := i.tmuxSession.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("failed to close tmux session: %w", err))
@@ -514,4 +532,65 @@ func (i *Instance) SendPrompt(prompt string) error {
 	}
 
 	return nil
+}
+
+// StartDevEnvironment starts the development environment for this instance
+func (i *Instance) StartDevEnvironment() error {
+	if !i.started {
+		return fmt.Errorf("instance not started")
+	}
+	if i.devEnvManager == nil {
+		return fmt.Errorf("development environment manager not initialized")
+	}
+
+	return i.devEnvManager.StartEnvironment(i.Title)
+}
+
+// StopDevEnvironment stops the development environment for this instance
+func (i *Instance) StopDevEnvironment() error {
+	if i.devEnvManager == nil {
+		return nil // Nothing to stop
+	}
+
+	return i.devEnvManager.StopEnvironment()
+}
+
+// IsDevEnvironmentEnabled returns whether the development environment is enabled
+func (i *Instance) IsDevEnvironmentEnabled() bool {
+	if i.devEnvManager == nil {
+		return false
+	}
+
+	return i.devEnvManager.IsEnabled()
+}
+
+// GetDevEnvironmentStatus returns the status of the development environment
+func (i *Instance) GetDevEnvironmentStatus() (string, error) {
+	if i.devEnvManager == nil {
+		return "unavailable", nil
+	}
+
+	return i.devEnvManager.GetStatus()
+}
+
+// AutoStartDevEnvironmentIfEnabled automatically starts the development environment
+// if it's enabled and the instance is in a Ready state (indicating agent completion)
+func (i *Instance) AutoStartDevEnvironmentIfEnabled() error {
+	if !i.started || i.devEnvManager == nil {
+		return nil
+	}
+
+	if !i.devEnvManager.IsEnabled() {
+		log.DebugLog.Printf("development environment not enabled for instance: %s", i.Title)
+		return nil
+	}
+
+	// Check if the instance is in Ready state (waiting for user input, indicating agent completion)
+	if i.Status != Ready {
+		log.DebugLog.Printf("instance %s not in Ready state, skipping auto-start of dev environment", i.Title)
+		return nil
+	}
+
+	log.DebugLog.Printf("auto-starting development environment for instance: %s", i.Title)
+	return i.StartDevEnvironment()
 }

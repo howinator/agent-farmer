@@ -5,6 +5,7 @@ import (
 	cmd2 "agent-farmer/cmd"
 	"agent-farmer/config"
 	"agent-farmer/daemon"
+	"agent-farmer/devenv"
 	"agent-farmer/log"
 	"agent-farmer/session"
 	"agent-farmer/session/git"
@@ -148,6 +149,166 @@ var (
 			fmt.Printf("https://github.com/howinator/agent-farmer/releases/tag/v%s\n", version)
 		},
 	}
+
+	devEnvCmd = &cobra.Command{
+		Use:   "devenv",
+		Short: "Manage development environment settings",
+		Long:  "Configure and manage the development environment that can be automatically started when agents complete tasks",
+	}
+
+	devEnvEnableCmd = &cobra.Command{
+		Use:   "enable",
+		Short: "Enable development environment for this repository",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			log.Initialize(false)
+			defer log.Close()
+
+			currentDir, err := filepath.Abs(".")
+			if err != nil {
+				return fmt.Errorf("failed to get current directory: %w", err)
+			}
+
+			if !git.IsGitRepo(currentDir) {
+				return fmt.Errorf("error: must be run from within a git repository")
+			}
+
+			devEnvManager, err := devenv.NewDevEnvironmentManager(currentDir)
+			if err != nil {
+				return fmt.Errorf("failed to initialize development environment: %w", err)
+			}
+
+			// Auto-detect configuration
+			if err := devEnvManager.AutoDetectConfiguration(); err != nil {
+				return fmt.Errorf("failed to auto-detect configuration: %w", err)
+			}
+
+			if err := devEnvManager.Enable(); err != nil {
+				return fmt.Errorf("failed to enable development environment: %w", err)
+			}
+
+			fmt.Println("Development environment enabled for this repository")
+
+			// Show current configuration
+			config := devEnvManager.GetConfiguration()
+			if config != nil {
+				fmt.Printf("Tiltfile: %s\n", config.TiltfilePath)
+				fmt.Printf("Docker Compose: %s\n", config.DockerComposePath)
+				fmt.Printf("Hostname Pattern: %s\n", config.HostnamePattern)
+				fmt.Printf("Port: %d\n", config.Port)
+			}
+
+			return nil
+		},
+	}
+
+	devEnvDisableCmd = &cobra.Command{
+		Use:   "disable",
+		Short: "Disable development environment for this repository",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			log.Initialize(false)
+			defer log.Close()
+
+			currentDir, err := filepath.Abs(".")
+			if err != nil {
+				return fmt.Errorf("failed to get current directory: %w", err)
+			}
+
+			if !git.IsGitRepo(currentDir) {
+				return fmt.Errorf("error: must be run from within a git repository")
+			}
+
+			devEnvManager, err := devenv.NewDevEnvironmentManager(currentDir)
+			if err != nil {
+				return fmt.Errorf("failed to initialize development environment: %w", err)
+			}
+
+			if err := devEnvManager.Disable(); err != nil {
+				return fmt.Errorf("failed to disable development environment: %w", err)
+			}
+
+			fmt.Println("Development environment disabled for this repository")
+			return nil
+		},
+	}
+
+	devEnvStatusCmd = &cobra.Command{
+		Use:   "status",
+		Short: "Show development environment status",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			log.Initialize(false)
+			defer log.Close()
+
+			currentDir, err := filepath.Abs(".")
+			if err != nil {
+				return fmt.Errorf("failed to get current directory: %w", err)
+			}
+
+			if !git.IsGitRepo(currentDir) {
+				return fmt.Errorf("error: must be run from within a git repository")
+			}
+
+			devEnvManager, err := devenv.NewDevEnvironmentManager(currentDir)
+			if err != nil {
+				return fmt.Errorf("failed to initialize development environment: %w", err)
+			}
+
+			enabled := devEnvManager.IsEnabled()
+			status, err := devEnvManager.GetStatus()
+			if err != nil {
+				return fmt.Errorf("failed to get status: %w", err)
+			}
+
+			fmt.Printf("Development Environment Status:\n")
+			fmt.Printf("  Enabled: %v\n", enabled)
+			fmt.Printf("  Status: %s\n", status)
+
+			config := devEnvManager.GetConfiguration()
+			if config != nil && enabled {
+				fmt.Printf("  Configuration:\n")
+				fmt.Printf("    Tiltfile: %s\n", config.TiltfilePath)
+				fmt.Printf("    Docker Compose: %s\n", config.DockerComposePath)
+				fmt.Printf("    Hostname Pattern: %s\n", config.HostnamePattern)
+				fmt.Printf("    Port: %d\n", config.Port)
+				if len(config.Services) > 0 {
+					fmt.Printf("    Services: %v\n", config.Services)
+				}
+			}
+
+			return nil
+		},
+	}
+
+	devEnvInitCmd = &cobra.Command{
+		Use:   "init",
+		Short: "Initialize development environment with a default Tiltfile",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			log.Initialize(false)
+			defer log.Close()
+
+			currentDir, err := filepath.Abs(".")
+			if err != nil {
+				return fmt.Errorf("failed to get current directory: %w", err)
+			}
+
+			if !git.IsGitRepo(currentDir) {
+				return fmt.Errorf("error: must be run from within a git repository")
+			}
+
+			devEnvManager, err := devenv.NewDevEnvironmentManager(currentDir)
+			if err != nil {
+				return fmt.Errorf("failed to initialize development environment: %w", err)
+			}
+
+			if err := devEnvManager.CreateDefaultTiltfile(); err != nil {
+				return fmt.Errorf("failed to create default Tiltfile: %w", err)
+			}
+
+			fmt.Println("Default Tiltfile created successfully")
+			fmt.Println("You can now customize it for your project's needs")
+
+			return nil
+		},
+	}
 )
 
 func init() {
@@ -167,9 +328,16 @@ func init() {
 	// Add force flag to reset command
 	resetCmd.Flags().BoolVarP(new(bool), "force", "f", false, "Also reset cached repository configurations")
 
+	// Add subcommands to devenv command
+	devEnvCmd.AddCommand(devEnvEnableCmd)
+	devEnvCmd.AddCommand(devEnvDisableCmd)
+	devEnvCmd.AddCommand(devEnvStatusCmd)
+	devEnvCmd.AddCommand(devEnvInitCmd)
+
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(resetCmd)
+	rootCmd.AddCommand(devEnvCmd)
 }
 
 func main() {

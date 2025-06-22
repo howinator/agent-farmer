@@ -64,6 +64,24 @@ type RepoConfig struct {
 	DefaultBranch string `json:"default_branch"`
 	// LastUpdated is a timestamp of when this cache was last updated
 	LastUpdated int64 `json:"last_updated"`
+	// DevEnvironment contains configuration for the development environment
+	DevEnvironment *DevEnvironmentConfig `json:"dev_environment,omitempty"`
+}
+
+// DevEnvironmentConfig represents configuration for the development environment
+type DevEnvironmentConfig struct {
+	// Enabled indicates whether the dev environment should be started when agents complete
+	Enabled bool `json:"enabled"`
+	// TiltfilePath is the path to the Tiltfile relative to the repository root
+	TiltfilePath string `json:"tiltfile_path"`
+	// DockerComposePath is the path to the docker-compose file relative to the repository root
+	DockerComposePath string `json:"docker_compose_path"`
+	// Services is a list of services to start (empty means all services)
+	Services []string `json:"services,omitempty"`
+	// HostnamePattern is the pattern for generating hostnames (e.g., "{task}.agent")
+	HostnamePattern string `json:"hostname_pattern"`
+	// Port is the base port for the development environment
+	Port int `json:"port"`
 }
 
 // DefaultConfig returns the default configuration

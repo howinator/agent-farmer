@@ -56,6 +56,13 @@ func RunDaemon(cfg *config.Config) error {
 							}
 						}
 					}
+
+					// Check if we should auto-start the development environment
+					if err := instance.AutoStartDevEnvironmentIfEnabled(); err != nil {
+						if everyN.ShouldLog() {
+							log.WarningLog.Printf("failed to auto-start dev environment for %s: %v", instance.Title, err)
+						}
+					}
 				}
 			}
 

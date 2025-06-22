@@ -1,0 +1,40 @@
+# Example docker-compose.yml for agent-farmer development environment
+# This is a demonstration file showing how to set up services for agent tasks
+
+version: '3.8'
+
+services:
+  # Example web application service
+  web:
+    build: .
+    ports:
+      - "${TASK_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=development
+      - TASK_NAME=${TASK_NAME:-default}
+    volumes:
+      - .:/app
+      - /app/node_modules
+    labels:
+      - "tilt.hostname=${TASK_HOSTNAME:-localhost}"
+
+  # Example database service
+  db:
+    image: postgres:13
+    environment:
+      - POSTGRES_DB=agent_farmer_${TASK_NAME:-default}
+      - POSTGRES_USER=dev
+      - POSTGRES_PASSWORD=dev
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Example Redis cache
+  redis:
+    image: redis:alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+volumes:
+  postgres_data:
