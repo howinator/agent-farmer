@@ -70,7 +70,7 @@ func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, bra
 		return nil, "", err
 	}
 
-	worktreeDir, err := getRepoWorktreeDirectory(repoPath)
+	worktreeDir, err := getWorktreeDirectory()
 	if err != nil {
 		return nil, "", err
 	}

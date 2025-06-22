@@ -82,6 +82,8 @@ When entering prompts for name generation or sending to AI assistants:
 - `tab` - Switch between tabs (list view, preview, diffs)
 - `?` - Show help screen
 
+
+When adding a keystroke, always remember to add it to the help menu, the key list at the bottom of the main screen and add it to the readme and CLAUDE.md
 ### Configuration
 
 - Config stored in `~/.agent-farmer/` directory
@@ -108,3 +110,5 @@ The application requires:
 - tmux (for session management)
 - gh (GitHub CLI, for git operations)
 - Must be run from within a git repository
+
+
