@@ -39,10 +39,10 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"j":          KeyDown,
 	"shift+up":   KeyShiftUp,
 	"shift+down": KeyShiftDown,
-	"N":          KeyPrompt,
+	"n":          KeyPrompt,
 	"enter":      KeyEnter,
 	"o":          KeyEnter,
-	"n":          KeyNew,
+	"N":          KeyNew,
 	"D":          KeyKill,
 	"q":          KeyQuit,
 	"tab":        KeyTab,
@@ -76,8 +76,8 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithHelp("↵/o", "open"),
 	),
 	KeyNew: key.NewBinding(
-		key.WithKeys("n"),
-		key.WithHelp("n", "new"),
+		key.WithKeys("N"),
+		key.WithHelp("N", "new"),
 	),
 	KeyKill: key.NewBinding(
 		key.WithKeys("D"),
@@ -96,8 +96,8 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithHelp("p", "push branch"),
 	),
 	KeyPrompt: key.NewBinding(
-		key.WithKeys("N"),
-		key.WithHelp("N", "new with prompt"),
+		key.WithKeys("n"),
+		key.WithHelp("n", "new with prompt"),
 	),
 	KeyCheckout: key.NewBinding(
 		key.WithKeys("c"),
