@@ -10,6 +10,7 @@
 - Manage instances and tasks in one terminal window
 - Review changes before applying them, checkout changes before pushing them
 - Each task gets its own isolated git workspace, so no conflicts
+- **🚀 NEW: Intelligent development environment** - automatically spins up your project when agents finish
 
 
 ### Installation
@@ -41,8 +42,13 @@ curl -fsSL https://raw.githubusercontent.com/howinator/agent-farmer/main/install
 
 ### Prerequisites
 
+**Core Requirements:**
 - [tmux](https://github.com/tmux/tmux/wiki/Installing)
 - [gh](https://cli.github.com/)
+
+**For Development Environment (optional):**
+- [Tilt](https://tilt.dev/) - For orchestrating development environments
+- [Docker](https://docker.com/) - For running containerized services
 
 ### Usage
 
@@ -54,6 +60,7 @@ Usage:
 Available Commands:
   completion  Generate the autocompletion script for the specified shell
   debug       Print debug information like config paths
+  devenv      Manage development environment settings
   help        Help about any command
   reset       Reset all stored instances
   version     Print the version number of agent-farmer
@@ -108,6 +115,138 @@ The menu at the bottom of the screen shows available commands:
 1. **tmux** to create isolated terminal sessions for each agent
 2. **git worktrees** to isolate codebases so each session works on its own branch
 3. A simple TUI interface for easy navigation and management
+
+## Development Environment
+
+Agent Farmer includes an intelligent development environment system that automatically spins up your project's services when agents complete their tasks. This gives you immediate access to test and review the agent's work.
+
+### Quick Start
+
+```bash
+# Enable development environment for your repository
+af devenv enable
+
+# Generate an intelligent Tiltfile based on your project
+af devenv init
+
+# Check status
+af devenv status
+```
+
+### Features
+
+- **🤖 Intelligent Setup**: Uses LLM analysis to understand your project structure
+- **🐳 Docker Integration**: Automatically detects and uses docker-compose files
+- **🌐 Task-Specific Hostnames**: Each agent task gets its own hostname (e.g., `github-123.agent`)
+- **⚡ Auto-Start**: Development environment starts automatically when agents finish
+- **📁 Organized**: Keeps configuration in `.agent-farmer/` directory
+
+### Supported Languages & Frameworks
+
+Agent Farmer automatically detects and configures development environments for:
+
+| Language/Framework | Package File | Dev Command | Port |
+|-------------------|--------------|-------------|------|
+| **Node.js** | `package.json` | `npm run dev` | 3000 |
+| **Python/Django** | `requirements.txt`, `pyproject.toml` | `python manage.py runserver` | 8000 |
+| **Go** | `go.mod` | `go run main.go` | 8080 |
+| **Rust** | `Cargo.toml` | `cargo run` | 8080 |
+| **PHP** | `composer.json` | `php -S localhost:8000` | 8000 |
+| **Ruby/Rails** | `Gemfile` | `rails server` | 3000 |
+| **Java/Maven** | `pom.xml` | `mvn spring-boot:run` | 8080 |
+| **Java/Gradle** | `build.gradle` | `./gradlew bootRun` | 8080 |
+
+### Docker Services
+
+The system automatically containerizes these services for dependencies:
+- **PostgreSQL** (`postgres`)
+- **MySQL** (`mysql`) 
+- **Redis** (`redis`)
+- **MongoDB** (`mongodb`)
+- **Elasticsearch** (`elasticsearch`)
+
+### Configuration
+
+#### Basic Commands
+
+```bash
+# Enable development environment
+af devenv enable
+
+# Disable development environment  
+af devenv disable
+
+# Check current status
+af devenv status
+
+# Generate/regenerate Tiltfile
+af devenv init [--force]
+af devenv generate
+```
+
+#### LLM-Powered Generation
+
+For the most intelligent Tiltfile generation, set up API access:
+
+```bash
+# Using Anthropic Claude (recommended)
+export ANTHROPIC_API_KEY=your_key_here
+
+# Or using OpenAI
+export OPENAI_API_KEY=your_key_here
+```
+
+**With API keys**: Creates sophisticated Tiltfiles that understand your project structure, README preferences, and technology stack.
+
+**Without API keys**: Falls back to template-based generation using detected package files.
+
+#### Environment Variables
+
+The development environment provides these variables to your Tiltfile:
+
+- `TASK_NAME` - Name of the current agent task
+- `TASK_HOSTNAME` - Generated hostname for this task  
+- `TASK_PORT` - Base port for this task
+
+#### Example Generated Tiltfile
+
+```python
+# Load docker-compose for dependencies
+docker_compose('../docker-compose.yml')
+
+# Run the main application on the host
+local_resource(
+    'web-app',
+    cmd='npm run dev',
+    deps=['package.json', 'src/'],
+    resource_deps=['postgres', 'redis'],
+    port_forwards=[os.getenv('TASK_PORT', '3000') + ':3000']
+)
+
+print('Starting development environment for task: ' + os.getenv('TASK_NAME', 'unknown'))
+print('Hostname: ' + os.getenv('TASK_HOSTNAME', 'localhost'))
+```
+
+#### Installing Development Environment Prerequisites
+
+```bash
+# Install Tilt
+curl -fsSL https://raw.githubusercontent.com/tilt-dev/tilt/master/scripts/install.sh | bash
+
+# Or via Homebrew
+brew install tilt-dev/tap/tilt
+
+# Install Docker
+# Visit https://docker.com/get-started or use your system's package manager
+```
+
+### How It Works
+
+1. **Repository Analysis**: Scans your project for Dockerfiles, docker-compose files, package managers, and README
+2. **LLM Processing**: Uses Claude or GPT to understand your project structure and generate appropriate configuration
+3. **Tiltfile Generation**: Creates a Tiltfile that runs dependencies in Docker and your app on the host
+4. **Auto-Start**: When agents reach "Ready" state, automatically starts the development environment
+5. **Task Isolation**: Each agent task gets its own hostname and port configuration
 
 ### Acknowledgements
 

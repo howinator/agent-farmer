@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -280,7 +281,8 @@ var (
 
 	devEnvInitCmd = &cobra.Command{
 		Use:   "init",
-		Short: "Initialize development environment with a default Tiltfile",
+		Short: "Initialize development environment with an intelligent Tiltfile",
+		Long:  "Generate a Tiltfile based on repository analysis using LLM (requires ANTHROPIC_API_KEY or OPENAI_API_KEY)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			log.Initialize(false)
 			defer log.Close()
@@ -299,12 +301,69 @@ var (
 				return fmt.Errorf("failed to initialize development environment: %w", err)
 			}
 
-			if err := devEnvManager.CreateDefaultTiltfile(); err != nil {
-				return fmt.Errorf("failed to create default Tiltfile: %w", err)
+			force, _ := cmd.Flags().GetBool("force")
+			if force {
+				// Remove existing Tiltfile if force flag is set
+				tiltfilePath := filepath.Join(currentDir, ".agent-farmer", "Tiltfile")
+				if err := os.Remove(tiltfilePath); err != nil && !os.IsNotExist(err) {
+					return fmt.Errorf("failed to remove existing Tiltfile: %w", err)
+				}
 			}
 
-			fmt.Println("Default Tiltfile created successfully")
-			fmt.Println("You can now customize it for your project's needs")
+			if err := devEnvManager.CreateDefaultTiltfile(); err != nil {
+				return fmt.Errorf("failed to create Tiltfile: %w", err)
+			}
+
+			fmt.Println("Intelligent Tiltfile created successfully")
+			fmt.Println("The Tiltfile was generated based on your repository structure and README")
+			fmt.Println("You can customize it further for your specific needs")
+
+			// Show API key status
+			hasAnthropic := os.Getenv("ANTHROPIC_API_KEY") != ""
+			hasOpenAI := os.Getenv("OPENAI_API_KEY") != ""
+			if !hasAnthropic && !hasOpenAI {
+				fmt.Println("\nNote: No API keys found - used fallback template generation")
+				fmt.Println("Set ANTHROPIC_API_KEY or OPENAI_API_KEY for smarter Tiltfile generation")
+			}
+
+			return nil
+		},
+	}
+
+	devEnvGenerateCmd = &cobra.Command{
+		Use:   "generate",
+		Short: "Regenerate Tiltfile with current repository analysis",
+		Long:  "Force regeneration of the Tiltfile using LLM analysis of the current repository state",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			log.Initialize(false)
+			defer log.Close()
+
+			currentDir, err := filepath.Abs(".")
+			if err != nil {
+				return fmt.Errorf("failed to get current directory: %w", err)
+			}
+
+			if !git.IsGitRepo(currentDir) {
+				return fmt.Errorf("error: must be run from within a git repository")
+			}
+
+			devEnvManager, err := devenv.NewDevEnvironmentManager(currentDir)
+			if err != nil {
+				return fmt.Errorf("failed to initialize development environment: %w", err)
+			}
+
+			// Remove existing Tiltfile
+			tiltfilePath := filepath.Join(currentDir, ".agent-farmer", "Tiltfile")
+			if err := os.Remove(tiltfilePath); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("failed to remove existing Tiltfile: %w", err)
+			}
+
+			if err := devEnvManager.CreateDefaultTiltfile(); err != nil {
+				return fmt.Errorf("failed to generate Tiltfile: %w", err)
+			}
+
+			fmt.Println("Tiltfile regenerated successfully")
+			fmt.Println("The new Tiltfile reflects the current repository structure")
 
 			return nil
 		},
@@ -328,11 +387,15 @@ func init() {
 	// Add force flag to reset command
 	resetCmd.Flags().BoolVarP(new(bool), "force", "f", false, "Also reset cached repository configurations")
 
+	// Add flags to devenv commands
+	devEnvInitCmd.Flags().BoolP("force", "f", false, "Overwrite existing Tiltfile if it exists")
+
 	// Add subcommands to devenv command
 	devEnvCmd.AddCommand(devEnvEnableCmd)
 	devEnvCmd.AddCommand(devEnvDisableCmd)
 	devEnvCmd.AddCommand(devEnvStatusCmd)
 	devEnvCmd.AddCommand(devEnvInitCmd)
+	devEnvCmd.AddCommand(devEnvGenerateCmd)
 
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(versionCmd)
