@@ -2,6 +2,7 @@ package config
 
 import (
 	"agent-farmer/log"
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,11 +11,13 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 const (
-	ConfigFileName = "config.json"
-	defaultProgram = "claude"
+	ConfigFileName     = "config.json"
+	RepoConfigFileName = "repo-config.json"
+	defaultProgram     = "claude"
 )
 
 // GetConfigDir returns the path to the application's configuration directory
@@ -36,6 +39,16 @@ type Config struct {
 	DaemonPollInterval int `json:"daemon_poll_interval"`
 	// BranchPrefix is the prefix used for git branches created by the application.
 	BranchPrefix string `json:"branch_prefix"`
+}
+
+// RepoConfig represents repository-specific cached settings
+type RepoConfig struct {
+	// RepoPath is the absolute path to the repository root
+	RepoPath string `json:"repo_path"`
+	// DefaultBranch is the cached default branch name (e.g., "main", "master")
+	DefaultBranch string `json:"default_branch"`
+	// LastUpdated is a timestamp of when this cache was last updated
+	LastUpdated int64 `json:"last_updated"`
 }
 
 // DefaultConfig returns the default configuration
@@ -164,4 +177,152 @@ func saveConfig(config *Config) error {
 // SaveConfig exports the saveConfig function for use by other packages
 func SaveConfig(config *Config) error {
 	return saveConfig(config)
+}
+
+// getRepoConfigPath returns the path to the repo-specific config file
+func getRepoConfigPath(repoPath string) (string, error) {
+	configDir, err := GetConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get config directory: %w", err)
+	}
+
+	// Create a hash of the repo path to use as filename
+	hash := md5.Sum([]byte(repoPath))
+	filename := fmt.Sprintf("repo-%x.json", hash)
+
+	return filepath.Join(configDir, filename), nil
+}
+
+// LoadRepoConfig loads the repository-specific configuration
+func LoadRepoConfig(repoPath string) (*RepoConfig, error) {
+	configPath, err := getRepoConfigPath(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repo config path: %w", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Return nil if file doesn't exist - this means no cached config
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to read repo config file: %w", err)
+	}
+
+	var config RepoConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse repo config file: %w", err)
+	}
+
+	return &config, nil
+}
+
+// SaveRepoConfig saves the repository-specific configuration
+func SaveRepoConfig(config *RepoConfig) error {
+	configPath, err := getRepoConfigPath(config.RepoPath)
+	if err != nil {
+		return fmt.Errorf("failed to get repo config path: %w", err)
+	}
+
+	configDir := filepath.Dir(configPath)
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	// Update the timestamp
+	config.LastUpdated = time.Now().Unix()
+
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal repo config: %w", err)
+	}
+
+	return os.WriteFile(configPath, data, 0644)
+}
+
+// DeleteRepoConfig deletes the repository-specific configuration
+func DeleteRepoConfig(repoPath string) error {
+	configPath, err := getRepoConfigPath(repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to get repo config path: %w", err)
+	}
+
+	err = os.Remove(configPath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to delete repo config file: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteAllRepoConfigs deletes all repository-specific configurations
+func DeleteAllRepoConfigs() error {
+	configDir, err := GetConfigDir()
+	if err != nil {
+		return fmt.Errorf("failed to get config directory: %w", err)
+	}
+
+	pattern := filepath.Join(configDir, "repo-*.json")
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return fmt.Errorf("failed to find repo config files: %w", err)
+	}
+
+	for _, match := range matches {
+		if err := os.Remove(match); err != nil && !os.IsNotExist(err) {
+			log.WarningLog.Printf("failed to delete repo config file %s: %v", match, err)
+		}
+	}
+
+	return nil
+}
+
+// GetDefaultBranch returns the default branch for the given repository, with caching
+func GetDefaultBranch(repoPath string) (string, error) {
+	// First, try to load from cache
+	repoConfig, err := LoadRepoConfig(repoPath)
+	if err != nil {
+		log.WarningLog.Printf("failed to load repo config: %v", err)
+	}
+
+	// If we have a cached value, return it
+	if repoConfig != nil && repoConfig.DefaultBranch != "" {
+		log.InfoLog.Printf("using cached default branch: %s", repoConfig.DefaultBranch)
+		return repoConfig.DefaultBranch, nil
+	}
+
+	// Otherwise, fetch it from git
+	log.InfoLog.Printf("fetching default branch from git for repo: %s", repoPath)
+	cmd := exec.Command("git", "remote", "show", "origin")
+	cmd.Dir = repoPath
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get default branch: %w", err)
+	}
+
+	// Parse the output to extract the default branch
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.Contains(line, "HEAD branch:") {
+			parts := strings.Split(line, ":")
+			if len(parts) >= 2 {
+				defaultBranch := strings.TrimSpace(parts[1])
+
+				// Cache the result
+				newRepoConfig := &RepoConfig{
+					RepoPath:      repoPath,
+					DefaultBranch: defaultBranch,
+				}
+				if saveErr := SaveRepoConfig(newRepoConfig); saveErr != nil {
+					log.WarningLog.Printf("failed to cache default branch: %v", saveErr)
+				}
+
+				log.InfoLog.Printf("cached default branch: %s", defaultBranch)
+				return defaultBranch, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("could not determine default branch from git remote show origin")
 }

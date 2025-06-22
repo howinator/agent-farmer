@@ -25,6 +25,7 @@ const (
 	KeyPrompt       // New key for entering a prompt
 	KeyHelp         // Key for showing help screen
 	KeyOpenWorktree // Key for opening worktree in new tmux window
+	KeyRebase       // Key for rebasing session branch onto default branch
 
 	// Diff keybindings
 	KeyShiftUp
@@ -48,6 +49,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"tab":        KeyTab,
 	"c":          KeyCheckout,
 	"r":          KeyResume,
+	"R":          KeyRebase,
 	"p":          KeySubmit,
 	"?":          KeyHelp,
 	"e":          KeyOpenWorktree,
@@ -114,6 +116,10 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyOpenWorktree: key.NewBinding(
 		key.WithKeys("e"),
 		key.WithHelp("e", "open worktree"),
+	),
+	KeyRebase: key.NewBinding(
+		key.WithKeys("R"),
+		key.WithHelp("R", "rebase onto default"),
 	),
 
 	// -- Special keybindings --

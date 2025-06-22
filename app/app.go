@@ -754,6 +754,27 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.state = stateDefault
 		})
 		return m, nil
+	case keys.KeyRebase:
+		selected := m.list.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+
+		// Create the rebase action as a tea.Cmd
+		rebaseAction := func() tea.Msg {
+			worktree, err := selected.GetGitWorktree()
+			if err != nil {
+				return err
+			}
+			if err = worktree.RebaseOntoDefault(); err != nil {
+				return err
+			}
+			return nil
+		}
+
+		// Show confirmation modal
+		message := fmt.Sprintf("[!] Rebase session '%s' onto default branch?", selected.Title)
+		return m, m.confirmAction(message, rebaseAction)
 	default:
 		return m, nil
 	}
