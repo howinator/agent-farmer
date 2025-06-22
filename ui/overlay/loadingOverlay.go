@@ -23,7 +23,7 @@ type LoadingOverlay struct {
 // NewLoadingOverlay creates a new loading overlay with the given message
 func NewLoadingOverlay(message string) *LoadingOverlay {
 	s := spinner.New()
-	s.Spinner = spinner.Points // More visually appealing animated spinner
+	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#06d6a0"))
 
 	return &LoadingOverlay{
@@ -33,6 +33,11 @@ func NewLoadingOverlay(message string) *LoadingOverlay {
 		spinner:     s,
 		borderColor: lipgloss.Color("#06d6a0"), // Green color for loading
 	}
+}
+
+// Init returns the initial command to start the spinner animation
+func (l *LoadingOverlay) Init() tea.Cmd {
+	return l.spinner.Tick
 }
 
 // Update updates the spinner animation

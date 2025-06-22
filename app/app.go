@@ -289,6 +289,13 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
+
+		// Also update loading overlay spinner if we're in loading state
+		if m.state == stateLoading && m.loadingOverlay != nil {
+			loadingCmd := m.loadingOverlay.Update(msg)
+			return m, tea.Batch(cmd, loadingCmd)
+		}
+
 		return m, cmd
 	}
 	return m, nil
@@ -349,6 +356,11 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 }
 
 func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
+	// Ignore all key presses during loading state
+	if m.state == stateLoading {
+		return m, nil
+	}
+
 	cmd, returnEarly := m.handleMenuHighlighting(msg)
 	if returnEarly {
 		return m, cmd
@@ -571,6 +583,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 						m.state = stateLoading
 						m.loadingOverlay = overlay.NewLoadingOverlay(m.pendingActionInfo.loadingMessage)
 						m.loadingOverlay.SetWidth(50)
+						// Start the spinner animation and execute the action
+						return m, tea.Batch(m.loadingOverlay.Init(), actionToExecute)
 					} else {
 						m.state = stateDefault
 					}
@@ -593,15 +607,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 
 			return m, nil
-		}
-		return m, nil
-	}
-
-	// Handle loading state - only allow spinner updates, ignore key presses
-	if m.state == stateLoading {
-		if m.loadingOverlay != nil {
-			cmd := m.loadingOverlay.Update(msg)
-			return m, cmd
 		}
 		return m, nil
 	}
