@@ -61,11 +61,11 @@ func (t *TextInputOverlay) View() string {
 func (t *TextInputOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
 	// Check for Ctrl+Enter submission (various representations)
 	keyStr := msg.String()
-	if msg.Type == tea.KeyCtrlJ ||     // Most common Ctrl+Enter on macOS/Linux terminals
-	   msg.Type == tea.KeyCtrlM ||     // Alternative Ctrl+Enter representation
-	   keyStr == "ctrl+enter" ||       // String representation
-	   keyStr == "ctrl+j" ||           // Alternative string representation
-	   keyStr == "ctrl+m" {            // Alternative string representation
+	if msg.Type == tea.KeyCtrlJ || // Most common Ctrl+Enter on macOS/Linux terminals
+		msg.Type == tea.KeyCtrlM || // Alternative Ctrl+Enter representation
+		keyStr == "ctrl+enter" || // String representation
+		keyStr == "ctrl+j" || // Alternative string representation
+		keyStr == "ctrl+m" { // Alternative string representation
 		// Submit the form regardless of focus
 		t.Submitted = true
 		if t.OnSubmit != nil {
