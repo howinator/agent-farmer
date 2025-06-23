@@ -56,6 +56,16 @@ type Config struct {
 	BranchPrefix string `json:"branch_prefix"`
 }
 
+// DevEnvironmentConfig represents development environment configuration
+type DevEnvironmentConfig struct {
+	Enabled           bool     `json:"enabled"`
+	TiltfilePath      string   `json:"tiltfile_path"`
+	DockerComposePath string   `json:"docker_compose_path"`
+	Services          []string `json:"services,omitempty"`
+	HostnamePattern   string   `json:"hostname_pattern"`
+	Port              int      `json:"port"`
+}
+
 // RepoConfig represents repository-specific cached settings
 type RepoConfig struct {
 	// RepoPath is the absolute path to the repository root
@@ -64,6 +74,8 @@ type RepoConfig struct {
 	DefaultBranch string `json:"default_branch"`
 	// LastUpdated is a timestamp of when this cache was last updated
 	LastUpdated int64 `json:"last_updated"`
+	// DevEnvironment holds development environment configuration
+	DevEnvironment *DevEnvironmentConfig `json:"dev_environment,omitempty"`
 }
 
 // DefaultConfig returns the default configuration

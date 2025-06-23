@@ -109,6 +109,7 @@ The menu at the bottom of the screen shows available commands:
 1. **tmux** to create isolated terminal sessions for each agent
 2. **git worktrees** to isolate codebases so each session works on its own branch
 3. A simple TUI interface for easy navigation and management
+4. **Intelligent Development Environment Setup**: When no Tiltfile exists, Agent Farmer automatically creates an agent session to generate a development environment configuration using the specified AI assistant (claude, aider, etc.). This works for any technology stack as the AI analyzes your project structure and creates appropriate configurations.
 
 ### Acknowledgements
 
