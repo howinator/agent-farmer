@@ -116,7 +116,3 @@ Agent Farmer is based on the original [Claude Squad](https://github.com/smtg-ai/
 ### License
 
 [AGPL-3.0](LICENSE.md)
-
-### Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=howinator/agent-farmer&type=Date)](https://www.star-history.com/#howinator/agent-farmer&Date)
