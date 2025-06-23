@@ -3,7 +3,8 @@
 [Agent Farmer](https://smtg-ai.github.io/agent-farmer/) is a terminal app that manages multiple [Claude Code](https://github.com/anthropiaf/claude-code), [Codex](https://github.com/openai/codex) (and other local agents including [Aider](https://github.com/Aider-AI/aider)) in separate workspaces, allowing you to work on multiple tasks simultaneously.
 
 
-![Agent Farmer Screenshot](assets/screenshot.png)
+<img width="1698" alt="image" src="https://github.com/user-attachments/assets/4e55b372-6244-4c97-8e01-dabda6ce79bf" />
+
 
 ### Highlights
 - Complete tasks in the background (including yolo / auto-accept mode!)
