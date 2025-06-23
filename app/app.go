@@ -2,6 +2,7 @@ package app
 
 import (
 	"agent-farmer/config"
+	"agent-farmer/devenv"
 	"agent-farmer/keys"
 	"agent-farmer/log"
 	"agent-farmer/session"
@@ -155,6 +156,11 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		if autoYes {
 			instance.AutoYes = true
 		}
+	}
+
+	// Check if Tiltfile exists, if not create agent session for generating it
+	if err := h.checkAndCreateTiltfileSession(program); err != nil {
+		log.ErrorLog.Printf("Failed to check/create Tiltfile session: %v", err)
 	}
 
 	return h
@@ -1015,4 +1021,80 @@ func (m *home) View() string {
 	}
 
 	return mainView
+}
+
+// checkAndCreateTiltfileSession checks if Tiltfile exists and creates an agent session to generate it if missing
+func (m *home) checkAndCreateTiltfileSession(program string) error {
+	// Get current working directory
+	currentDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+
+	// Create dev environment manager
+	devEnvManager, err := devenv.NewDevEnvironmentManager(currentDir)
+	if err != nil {
+		return fmt.Errorf("failed to create dev environment manager: %w", err)
+	}
+
+	// Check if Tiltfile already exists
+	if devEnvManager.TiltfileExists() {
+		log.DebugLog.Printf("Tiltfile already exists, skipping auto-generation")
+		return nil
+	}
+
+	// Check if we already have a session for generating Tiltfile
+	for _, instance := range m.list.GetInstances() {
+		if instance.Title == "setup-dev-environment" {
+			log.DebugLog.Printf("Dev environment setup session already exists")
+			return nil
+		}
+	}
+
+	log.InfoLog.Printf("Tiltfile not found, creating agent session to generate it")
+
+	// Generate prompt for Tiltfile creation
+	prompt, err := devenv.GeneratePromptForTiltfile(currentDir)
+	if err != nil {
+		return fmt.Errorf("failed to generate Tiltfile prompt: %w", err)
+	}
+
+	// Create instance for Tiltfile generation
+	instance, err := session.NewInstance(session.InstanceOptions{
+		Title:   "setup-dev-environment",
+		Path:    currentDir,
+		Program: program,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create Tiltfile generation instance: %w", err)
+	}
+
+	// Start the instance
+	if err := instance.Start(true); err != nil {
+		return fmt.Errorf("failed to start Tiltfile generation instance: %w", err)
+	}
+
+	// Add to list and save
+	m.newInstanceFinalizer = m.list.AddInstance(instance)
+	m.list.SetSelectedInstance(m.list.NumInstances() - 1)
+	if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+		return fmt.Errorf("failed to save instances: %w", err)
+	}
+
+	// Call the finalizer and set autoyes if needed
+	m.newInstanceFinalizer()
+	if m.autoYes {
+		instance.AutoYes = true
+	}
+
+	// Send the prompt to the agent
+	go func() {
+		// Give the agent time to initialize
+		time.Sleep(2 * time.Second)
+		if err := instance.SendPrompt(prompt); err != nil {
+			log.ErrorLog.Printf("Failed to send Tiltfile generation prompt: %v", err)
+		}
+	}()
+
+	return nil
 }

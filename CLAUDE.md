@@ -104,6 +104,15 @@ The application can automatically generate meaningful session names based on you
   - Identifies coding keywords and actions
   - Ensures names are under 32 characters and git-branch friendly
 
+### Automatic Development Environment Setup
+
+Agent Farmer now includes intelligent development environment setup:
+
+- **Auto-Detection**: When no `.agent-farmer/Tiltfile` exists, the application automatically creates an agent session to generate one
+- **LLM-Powered**: Uses the agent specified by `-p` flag (claude, aider, etc.) to analyze the repository structure and create appropriate configurations
+- **Technology Agnostic**: Works with any technology stack by having the AI understand project structure from package files, Docker configs, and README content
+- **File-Based Analysis**: The prompt provides file names and paths as pointers for the agent to examine, rather than including file contents directly
+
 ### Prerequisites
 
 The application requires:
