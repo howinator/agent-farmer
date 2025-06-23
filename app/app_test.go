@@ -464,3 +464,320 @@ func TestConfirmationModalVisualAppearance(t *testing.T) {
 	// Test that the danger indicator is preserved
 	assert.Contains(t, rendered, "[!")
 }
+
+// TestLoadingIndicatorForLongRunningOperations tests that loading indicators only show for appropriate operations
+func TestLoadingIndicatorForLongRunningOperations(t *testing.T) {
+	// Create a minimal setup
+	spinner := spinner.New(spinner.WithSpinner(spinner.MiniDot))
+	list := ui.NewList(&spinner, false)
+
+	// Add test instance
+	instance, err := session.NewInstance(session.InstanceOptions{
+		Title:   "test-session",
+		Path:    t.TempDir(),
+		Program: "claude",
+		AutoYes: false,
+	})
+	require.NoError(t, err)
+	_ = list.AddInstance(instance)
+	list.SetSelectedInstance(0)
+
+	h := &home{
+		ctx:       context.Background(),
+		state:     stateDefault,
+		appConfig: config.DefaultConfig(),
+		list:      list,
+		spinner:   spinner,
+	}
+
+	t.Run("delete operation shows confirmation only, no loading indicator", func(t *testing.T) {
+		h.state = stateDefault
+		h.confirmationOverlay = nil
+		h.loadingOverlay = nil
+		h.pendingAction = nil
+		h.pendingActionInfo = nil
+
+		// Create a mock delete action (we won't actually execute it)
+		killAction := func() tea.Msg {
+			return instanceChangedMsg{}
+		}
+
+		// Call confirmAction (not confirmActionWithLoading)
+		_ = h.confirmAction("[!] Kill session 'test-session'?", killAction)
+
+		// Verify state
+		assert.Equal(t, stateConfirm, h.state)
+		assert.NotNil(t, h.confirmationOverlay)
+		assert.Nil(t, h.loadingOverlay) // No loading overlay for delete
+		assert.NotNil(t, h.pendingAction)
+		assert.Nil(t, h.pendingActionInfo) // No pendingActionInfo for simple confirmations
+	})
+
+	t.Run("push operation shows confirmation and loading indicator", func(t *testing.T) {
+		h.state = stateDefault
+		h.confirmationOverlay = nil
+		h.loadingOverlay = nil
+		h.pendingAction = nil
+		h.pendingActionInfo = nil
+
+		// Create a mock push action (we won't actually execute it)
+		pushAction := func() tea.Msg {
+			return pushCompleteMsg{}
+		}
+
+		// Call confirmActionWithLoading
+		_ = h.confirmActionWithLoading("[!] Push changes from session 'test-session'?", pushAction, "Pushing changes...")
+
+		// Verify state
+		assert.Equal(t, stateConfirm, h.state)
+		assert.NotNil(t, h.confirmationOverlay)
+		assert.Nil(t, h.loadingOverlay) // Loading overlay created only after confirmation
+		assert.Nil(t, h.pendingAction)
+		assert.NotNil(t, h.pendingActionInfo) // pendingActionInfo used for loading operations
+		assert.True(t, h.pendingActionInfo.needsLoading)
+		assert.Equal(t, "Pushing changes...", h.pendingActionInfo.loadingMessage)
+	})
+
+	t.Run("rebase operation shows confirmation and loading indicator", func(t *testing.T) {
+		h.state = stateDefault
+		h.confirmationOverlay = nil
+		h.loadingOverlay = nil
+		h.pendingAction = nil
+		h.pendingActionInfo = nil
+
+		// Create a mock rebase action
+		rebaseAction := func() tea.Msg {
+			return rebaseCompleteMsg{}
+		}
+
+		// Call confirmActionWithLoading
+		_ = h.confirmActionWithLoading("[!] Rebase session 'test-session'?", rebaseAction, "Rebasing onto default branch...")
+
+		// Verify state
+		assert.Equal(t, stateConfirm, h.state)
+		assert.NotNil(t, h.confirmationOverlay)
+		assert.Nil(t, h.loadingOverlay) // Loading overlay created only after confirmation
+		assert.Nil(t, h.pendingAction)
+		assert.NotNil(t, h.pendingActionInfo)
+		assert.True(t, h.pendingActionInfo.needsLoading)
+		assert.Equal(t, "Rebasing onto default branch...", h.pendingActionInfo.loadingMessage)
+	})
+}
+
+// TestLoadingIndicatorAnimation tests that the spinner animation works correctly
+func TestLoadingIndicatorAnimation(t *testing.T) {
+	h := &home{
+		ctx:       context.Background(),
+		state:     stateLoading,
+		appConfig: config.DefaultConfig(),
+		spinner:   spinner.New(spinner.WithSpinner(spinner.MiniDot)),
+	}
+
+	// Create a loading overlay
+	h.loadingOverlay = overlay.NewLoadingOverlay("Test loading...")
+	h.loadingOverlay.SetWidth(50)
+
+	t.Run("loading overlay properly initialized", func(t *testing.T) {
+		assert.NotNil(t, h.loadingOverlay)
+		assert.False(t, h.loadingOverlay.Dismissed)
+
+		// Test that Init() returns a spinner tick command
+		initCmd := h.loadingOverlay.Init()
+		assert.NotNil(t, initCmd)
+
+		// Execute the init command to get the first tick message
+		initMsg := initCmd()
+		assert.IsType(t, spinner.TickMsg{}, initMsg)
+	})
+
+	t.Run("spinner tick messages update loading overlay", func(t *testing.T) {
+		// Create a spinner tick message
+		tickMsg := spinner.TickMsg{}
+
+		// Send the tick message through the main Update method
+		model, cmd := h.Update(tickMsg)
+		homeModel, ok := model.(*home)
+		require.True(t, ok)
+
+		// Verify the loading overlay is still present and state unchanged
+		assert.Equal(t, stateLoading, homeModel.state)
+		assert.NotNil(t, homeModel.loadingOverlay)
+		assert.False(t, homeModel.loadingOverlay.Dismissed)
+
+		// Verify that a command was returned (continuing the animation)
+		assert.NotNil(t, cmd)
+	})
+
+	t.Run("loading overlay updates independently from main spinner", func(t *testing.T) {
+		// Test that both main spinner and loading overlay get updated on tick
+		tickMsg := spinner.TickMsg{}
+
+		// Capture initial spinner state
+		initialMainSpinner := h.spinner.View()
+
+		// Send tick message
+		model, cmd := h.Update(tickMsg)
+		homeModel, ok := model.(*home)
+		require.True(t, ok)
+
+		// Verify main spinner was updated
+		newMainSpinner := homeModel.spinner.View()
+		// Note: spinner view might be the same if it's at the same animation frame
+		// but the important thing is that Update was called without error
+
+		// Verify loading overlay was also updated (command returned for continuation)
+		assert.NotNil(t, cmd)
+		assert.Equal(t, stateLoading, homeModel.state)
+		assert.NotNil(t, homeModel.loadingOverlay)
+
+		_ = initialMainSpinner // Use the variable to avoid unused variable error
+		_ = newMainSpinner     // Use the variable to avoid unused variable error
+	})
+}
+
+// TestLoadingIndicatorDismissal tests that loading indicators are properly dismissed
+func TestLoadingIndicatorDismissal(t *testing.T) {
+	h := &home{
+		ctx:       context.Background(),
+		state:     stateLoading,
+		appConfig: config.DefaultConfig(),
+		spinner:   spinner.New(spinner.WithSpinner(spinner.MiniDot)),
+		errBox:    ui.NewErrBox(), // Initialize errBox to prevent nil pointer dereference
+	}
+
+	// Create a loading overlay
+	h.loadingOverlay = overlay.NewLoadingOverlay("Processing...")
+	h.loadingOverlay.SetWidth(50)
+
+	testCases := []struct {
+		name        string
+		message     tea.Msg
+		shouldClear bool
+	}{
+		{
+			name:        "push completion message dismisses loading",
+			message:     pushCompleteMsg{},
+			shouldClear: true,
+		},
+		{
+			name:        "rebase completion message dismisses loading",
+			message:     rebaseCompleteMsg{},
+			shouldClear: true,
+		},
+		{
+			name:        "operation completion message dismisses loading",
+			message:     operationCompleteMsg{},
+			shouldClear: true,
+		},
+		{
+			name:        "error message dismisses loading",
+			message:     fmt.Errorf("test error"),
+			shouldClear: true,
+		},
+		{
+			name:        "spinner tick does not dismiss loading",
+			message:     spinner.TickMsg{},
+			shouldClear: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Reset loading state
+			h.state = stateLoading
+			h.loadingOverlay = overlay.NewLoadingOverlay("Processing...")
+			h.loadingOverlay.SetWidth(50)
+
+			// Send the message
+			model, _ := h.Update(tc.message)
+			homeModel, ok := model.(*home)
+			require.True(t, ok)
+
+			if tc.shouldClear {
+				// Verify loading overlay was dismissed and state reset
+				assert.Equal(t, stateDefault, homeModel.state)
+				assert.Nil(t, homeModel.loadingOverlay)
+			} else {
+				// Verify loading overlay remains
+				assert.Equal(t, stateLoading, homeModel.state)
+				assert.NotNil(t, homeModel.loadingOverlay)
+				assert.False(t, homeModel.loadingOverlay.Dismissed)
+			}
+		})
+	}
+}
+
+// TestKeyInputIgnoredDuringLoading tests that key presses are ignored during loading
+func TestKeyInputIgnoredDuringLoading(t *testing.T) {
+	h := &home{
+		ctx:       context.Background(),
+		state:     stateLoading,
+		appConfig: config.DefaultConfig(),
+		spinner:   spinner.New(spinner.WithSpinner(spinner.MiniDot)),
+	}
+
+	// Create a loading overlay
+	h.loadingOverlay = overlay.NewLoadingOverlay("Loading...")
+	h.loadingOverlay.SetWidth(50)
+
+	testKeys := []struct {
+		name   string
+		keyMsg tea.KeyMsg
+	}{
+		{
+			name:   "regular key press",
+			keyMsg: tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")},
+		},
+		{
+			name:   "delete key",
+			keyMsg: tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("D")},
+		},
+		{
+			name:   "enter key",
+			keyMsg: tea.KeyMsg{Type: tea.KeyEnter},
+		},
+		{
+			name:   "escape key",
+			keyMsg: tea.KeyMsg{Type: tea.KeyEscape},
+		},
+		{
+			name:   "ctrl+c",
+			keyMsg: tea.KeyMsg{Type: tea.KeyCtrlC},
+		},
+	}
+
+	for _, tc := range testKeys {
+		t.Run(tc.name, func(t *testing.T) {
+			// Reset state
+			h.state = stateLoading
+			h.loadingOverlay = overlay.NewLoadingOverlay("Loading...")
+
+			// Send key message through the main Update method
+			model, cmd := h.Update(tc.keyMsg)
+			homeModel, ok := model.(*home)
+			require.True(t, ok)
+
+			// Verify state remains unchanged (key was ignored)
+			assert.Equal(t, stateLoading, homeModel.state)
+			assert.NotNil(t, homeModel.loadingOverlay)
+			assert.False(t, homeModel.loadingOverlay.Dismissed)
+
+			// Verify no command was returned (key processing was skipped)
+			assert.Nil(t, cmd)
+		})
+	}
+
+	t.Run("loading state prevents key processing in handleKeyPress", func(t *testing.T) {
+		// Test the handleKeyPress method directly
+		h.state = stateLoading
+		keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")}
+
+		model, cmd := h.handleKeyPress(keyMsg)
+		homeModel, ok := model.(*home)
+		require.True(t, ok)
+
+		// Verify state unchanged and no command returned
+		assert.Equal(t, stateLoading, homeModel.state)
+		assert.Nil(t, cmd)
+	})
+}

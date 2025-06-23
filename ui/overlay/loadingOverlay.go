@@ -35,6 +35,11 @@ func NewLoadingOverlay(message string) *LoadingOverlay {
 	}
 }
 
+// Init returns the initial command to start the spinner animation
+func (l *LoadingOverlay) Init() tea.Cmd {
+	return l.spinner.Tick
+}
+
 // Update updates the spinner animation
 func (l *LoadingOverlay) Update(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd

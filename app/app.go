@@ -22,6 +22,8 @@ const GlobalInstanceLimit = 10
 
 // Custom message types
 type pushCompleteMsg struct{}
+type rebaseCompleteMsg struct{}
+type operationCompleteMsg struct{}
 
 // Run is the main entrypoint into the application.
 func Run(ctx context.Context, program string, autoYes bool) error {
@@ -106,6 +108,8 @@ type home struct {
 	loadingOverlay *overlay.LoadingOverlay
 	// pendingAction stores the action to execute when confirmation is confirmed
 	pendingAction tea.Cmd
+	// pendingActionInfo stores more detailed information about pending actions
+	pendingActionInfo *pendingActionInfo
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -208,8 +212,8 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
-	case pushCompleteMsg:
-		// Handle push completion - dismiss loading overlay and return to default state
+	case pushCompleteMsg, rebaseCompleteMsg, operationCompleteMsg:
+		// Handle operation completion - dismiss loading overlay and return to default state
 		if m.loadingOverlay != nil {
 			m.loadingOverlay.Dismiss()
 			m.loadingOverlay = nil
@@ -276,8 +280,8 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.loadingOverlay != nil {
 			m.loadingOverlay.Dismiss()
 			m.loadingOverlay = nil
-			m.state = stateDefault
 		}
+		m.state = stateDefault
 		return m, m.handleError(msg)
 	case instanceChangedMsg:
 		// Handle instance changed after confirmation action
@@ -285,6 +289,13 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
+
+		// Also update loading overlay spinner if we're in loading state
+		if m.state == stateLoading && m.loadingOverlay != nil {
+			loadingCmd := m.loadingOverlay.Update(msg)
+			return m, tea.Batch(cmd, loadingCmd)
+		}
+
 		return m, cmd
 	}
 	return m, nil
@@ -345,6 +356,11 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 }
 
 func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
+	// Ignore all key presses during loading state
+	if m.state == stateLoading {
+		return m, nil
+	}
+
 	cmd, returnEarly := m.handleMenuHighlighting(msg)
 	if returnEarly {
 		return m, cmd
@@ -559,12 +575,23 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			var actionToExecute tea.Cmd = nil
 
 			// If we have a pending action and it was confirmed (not cancelled)
-			if m.pendingAction != nil && msg.String() == "y" {
-				actionToExecute = m.pendingAction
-				// Show loading indicator for push actions
-				m.state = stateLoading
-				m.loadingOverlay = overlay.NewLoadingOverlay("Pushing changes...")
-				m.loadingOverlay.SetWidth(50)
+			if (m.pendingAction != nil || m.pendingActionInfo != nil) && msg.String() == "y" {
+				if m.pendingActionInfo != nil {
+					actionToExecute = m.pendingActionInfo.action
+					// Show loading indicator if needed
+					if m.pendingActionInfo.needsLoading {
+						m.state = stateLoading
+						m.loadingOverlay = overlay.NewLoadingOverlay(m.pendingActionInfo.loadingMessage)
+						m.loadingOverlay.SetWidth(50)
+						// Start the spinner animation and execute the action
+						return m, tea.Batch(m.loadingOverlay.Init(), actionToExecute)
+					} else {
+						m.state = stateDefault
+					}
+				} else if m.pendingAction != nil {
+					actionToExecute = m.pendingAction
+					m.state = stateDefault
+				}
 			} else {
 				m.state = stateDefault
 			}
@@ -572,6 +599,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			// Clean up confirmation overlay
 			m.confirmationOverlay = nil
 			m.pendingAction = nil
+			m.pendingActionInfo = nil
 
 			// Execute the action if confirmed
 			if actionToExecute != nil {
@@ -579,15 +607,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 
 			return m, nil
-		}
-		return m, nil
-	}
-
-	// Handle loading state - only allow spinner updates, ignore key presses
-	if m.state == stateLoading {
-		if m.loadingOverlay != nil {
-			cmd := m.loadingOverlay.Update(msg)
-			return m, cmd
 		}
 		return m, nil
 	}
@@ -717,7 +736,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		// Show confirmation modal
 		message := fmt.Sprintf("[!] Push changes from session '%s'?", selected.Title)
-		return m, m.confirmAction(message, pushAction)
+		return m, m.confirmActionWithLoading(message, pushAction, "Pushing changes...")
 	case keys.KeyCheckout:
 		selected := m.list.GetSelectedInstance()
 		if selected == nil {
@@ -825,12 +844,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return err
 			}
 			log.InfoLog.Printf("rebase completed successfully for session '%s'", selected.Title)
-			return nil
+			return rebaseCompleteMsg{}
 		}
 
 		// Show confirmation modal
 		message := fmt.Sprintf("[!] Rebase session '%s' onto default branch?", selected.Title)
-		return m, m.confirmAction(message, rebaseAction)
+		return m, m.confirmActionWithLoading(message, rebaseAction, "Rebasing onto default branch...")
 	default:
 		return m, nil
 	}
@@ -904,6 +923,7 @@ func (m *home) handleError(err error) tea.Cmd {
 func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
 	m.state = stateConfirm
 	m.pendingAction = action
+	m.pendingActionInfo = nil // Clear any previous pendingActionInfo
 
 	// Create and show the confirmation overlay using ConfirmationOverlay
 	m.confirmationOverlay = overlay.NewConfirmationOverlay(message)
@@ -919,6 +939,42 @@ func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
 	m.confirmationOverlay.OnCancel = func() {
 		m.state = stateDefault
 		m.pendingAction = nil
+	}
+
+	return nil
+}
+
+// pendingActionInfo stores information about a pending action including whether it needs loading
+type pendingActionInfo struct {
+	action         tea.Cmd
+	needsLoading   bool
+	loadingMessage string
+}
+
+// confirmActionWithLoading shows a confirmation modal and stores the action to execute on confirm
+// When confirmed, it shows a loading indicator with the specified message
+func (m *home) confirmActionWithLoading(message string, action tea.Cmd, loadingMessage string) tea.Cmd {
+	m.state = stateConfirm
+	m.pendingAction = nil // Clear any previous pendingAction
+	m.pendingActionInfo = &pendingActionInfo{
+		action:         action,
+		needsLoading:   true,
+		loadingMessage: loadingMessage,
+	}
+
+	// Create and show the confirmation overlay using ConfirmationOverlay
+	m.confirmationOverlay = overlay.NewConfirmationOverlay(message)
+	// Set a fixed width for consistent appearance
+	m.confirmationOverlay.SetWidth(50)
+
+	// Set callbacks for confirmation and cancellation
+	m.confirmationOverlay.OnConfirm = func() {
+		// State will be set by the confirmation handler
+	}
+
+	m.confirmationOverlay.OnCancel = func() {
+		m.state = stateDefault
+		m.pendingActionInfo = nil
 	}
 
 	return nil
