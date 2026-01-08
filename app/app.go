@@ -794,6 +794,14 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		worktreePath := worktree.GetWorktreePath()
 		sessionName := fmt.Sprintf("%s-tree", selected.Title)
 
+		// Validate that the worktree path exists
+		if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
+			if selected.Paused() {
+				return m, m.handleError(fmt.Errorf("cannot open worktree: session is paused (resume it first)"))
+			}
+			return m, m.handleError(fmt.Errorf("worktree path does not exist: %s", worktreePath))
+		}
+
 		// Show help screen before attaching to worktree session (similar to 'o' key)
 		m.showHelpScreen(helpTypeInstanceAttach, func() {
 			// Create a tmux session for the worktree using proper TmuxSession infrastructure
@@ -802,6 +810,13 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 			// Check if session already exists
 			if tmuxSession.DoesSessionExist() {
+				// Verify the worktree path still exists before restoring
+				if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
+					// Worktree doesn't exist but session does - kill stale session
+					_ = tmuxSession.Close()
+					m.handleError(fmt.Errorf("worktree path no longer exists: %s", worktreePath))
+					return
+				}
 				// Session exists, restore and attach to it
 				if err := tmuxSession.Restore(); err != nil {
 					m.handleError(fmt.Errorf("failed to restore worktree session: %v", err))
